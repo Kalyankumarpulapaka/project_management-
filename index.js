@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs'; // Switched to bcryptjs
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 
@@ -11,7 +11,9 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || '*' // Replace with your frontend URL for production
+}));
 
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -48,7 +50,7 @@ app.post('/api/auth/register', async (req, res) => {
     const token = generateToken(newUser._id);
     res.status(201).json({ token });
   } catch (err) {
-    res.status(500).json({ message: 'Error registering user: ' + err.message });
+    res.status(500).json({ message: `Error registering user: ${err.message}` });
   }
 });
 
@@ -66,21 +68,21 @@ app.post('/api/auth/login', async (req, res) => {
     const token = generateToken(user._id);
     res.status(200).json({ token });
   } catch (err) {
-    res.status(500).json({ message: 'Error logging in: ' + err.message });
+    res.status(500).json({ message: `Error logging in: ${err.message}` });
   }
 });
 
 // Protected Route
 app.get('/api/dashboard', (req, res) => {
-  const token = req.headers.authorization;
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ message: 'Access denied. Token not provided' });
 
-  if (!token) return res.status(401).json({ message: 'Access denied' });
-
+  const token = authHeader.split(' ')[1];
   try {
     const verified = jwt.verify(token, process.env.JWT_SECRET);
     res.status(200).json({ message: 'Welcome to the dashboard!', user: verified });
   } catch (err) {
-    res.status(401).json({ message: 'Invalid token' });
+    res.status(403).json({ message: 'Invalid or expired token' });
   }
 });
 
