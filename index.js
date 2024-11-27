@@ -1,22 +1,31 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs'; // Switched to bcryptjs
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 
 dotenv.config();
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is missing from environment variables");
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*' // Replace with your frontend URL for production
+  origin: process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : '*'
 }));
 
 // MongoDB connection
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  
+})
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('Failed to connect to MongoDB:', err));
 
@@ -30,15 +39,11 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 // Generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-};
+const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-// Routes
 // Register Route
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
-
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: 'Email already registered' });
@@ -57,7 +62,6 @@ app.post('/api/auth/register', async (req, res) => {
 // Login Route
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -75,8 +79,9 @@ app.post('/api/auth/login', async (req, res) => {
 // Protected Route
 app.get('/api/dashboard', (req, res) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ message: 'Access denied. Token not provided' });
-
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Access denied. Token not provided or invalid format' });
+  }
   const token = authHeader.split(' ')[1];
   try {
     const verified = jwt.verify(token, process.env.JWT_SECRET);
